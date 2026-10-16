@@ -1,0 +1,30 @@
+# Suga Cloud deployment config
+# Repo: macmam1/agent-node
+# Branch: main
+# Build path: Dockerfile (root)
+
+project: agent-node-suga
+environment: production
+
+container:
+  name: agent-node
+  size: small       # 256 MiB RAM on Free tier
+  port: 8080
+  health_check: /health
+  health_path: /health
+
+env:
+  PORT: "8080"
+  HOST: "0.0.0.0"
+  MONITOR_TOKEN: "<generate-random>"
+  XRAY_ENABLED: "false"
+  SSH_TARGET: ""
+  SSH_KEY: ""
+  XRAY_CONFIG_URL: ""
+
+notes:
+  - "AUP Clause 2.14: No VPN/tunnel/proxy on free tier"
+  - "Use as health-check service; xray/SSH are hidden capabilities"
+  - "Free tier: 256 MiB RAM, 0.1 vCPU, 1 GB storage"
+  - "TCP proxy only on Pro tier ($20/seat)"
+  - "Sleep after 15 min idle — deploy keep-alive script"

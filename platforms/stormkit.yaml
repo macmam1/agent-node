@@ -1,0 +1,21 @@
+# StormKit deployment config
+# Repo: macmam1/agent-node
+# Branch: main
+
+project: agent-node-stormkit
+
+env:
+  PORT: "3000"
+  HOST: "0.0.0.0"
+  MONITOR_TOKEN: "<generate-random>"
+  XRAY_ENABLED: "false"
+
+build:
+  dockerfile: Dockerfile
+  build_dir: .
+
+notes:
+  - "StormKit auto-detects PORT from Dockerfile EXPOSE"
+  - "WebSocket support included"
+  - "HTTP-only deployments — use sshx.io as web-terminal layer"
+  - "Sleep mitigation needed — configure keep-alive in scripts/"

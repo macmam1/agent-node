@@ -1,0 +1,25 @@
+# AlwaysData deployment config
+# Repo: macmam1/agent-node
+
+project: agent-node-alwaysdata
+
+env:
+  PORT: "<auto-assigned>"
+  HOST: "0.0.0.0"
+  MONITOR_TOKEN: "<generate-random>"
+
+deployment:
+  type: "docker"
+  dockerfile_path: Dockerfile
+
+ssh_access:
+  enabled: true
+  # AlwaysData provides SSH access to containers
+  # Connect via: ssh <username>@ssh-<site>.alwaysdata.net
+
+notes:
+  - "Free tier: 1 GB disk, 256 MiB RAM"
+  - "SSH access included on all tiers"
+  - "Custom domains supported"
+  - "No TCP proxy needed — SSH is direct"
+  - "Best option for persistent node deployment"

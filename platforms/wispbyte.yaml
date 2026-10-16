@@ -1,0 +1,28 @@
+# WispByte deployment config
+# Repo: macmam1/agent-node
+
+project: agent-node-wispbyte
+region: "US"        # or EU, ASIA
+plan: "FREE"
+
+env:
+  PORT: "8080"
+  HOST: "0.0.0.0"
+  MONITOR_TOKEN: "<generate-random>"
+
+docker:
+  dockerfile: Dockerfile
+  # WispByte provides direct Docker access — SSH port 22 available
+  ports:
+    - "8080:8080"    # Health check
+    - "22:22"          # SSH (if sshd added)
+
+ssh_access:
+  enabled: true
+  # WispByte allows direct SSH to container
+  # Use this for terminal access instead of web shell
+
+notes:
+  - "Direct Docker + SSH access available"
+  - "Persistent containers (no sleep)"
+  - "Best option for VPN node deployment"
