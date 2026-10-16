@@ -33,7 +33,12 @@ except Exception:
 # ── Environment ─────────────────────────────────────────────────
 PORT = int(os.environ.get("PORT", str(CONFIG.get("server", {}).get("port", 8080))))
 HOST = os.environ.get("HOST", "0.0.0.0")
-TOKEN = os.environ.get("MONITOR_TOKEN", CONFIG.get("auth", {}).get("token", "changeme"))
+# Auto-generate token if not set (log to stderr for visibility)
+TOKEN = os.environ.get("MONITOR_TOKEN")
+if not TOKEN:
+    import secrets
+    TOKEN = secrets.token_urlsafe(24)
+    print(f"[agent-node] MONITOR_TOKEN auto-generated: use this token for /api/* and /ws/*", flush=True)
 LOG_DIR = CONFIG.get("logging", {}).get("dir", "/var/log/agent-node")
 
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -371,5 +376,17 @@ if __name__ == "__main__":
     app = create_app()
     log.info(f"Starting agent-node on {HOST}:{PORT}")
     log.info(f"xray support: {'enabled' if XRAY_ENABLED else 'disabled'}")
-    log.info(f"SSH client: {'available' if os.path.exists('/usr/bin/ssh') else 'not found'}")
+
+    # Check SSH in both possible locations
+    ssh_paths = ["/usr/bin/ssh", "/usr/bin/ssh", "/usr/local/bin/ssh"]
+    ssh_found = any(os.path.exists(p) for p in ssh_paths)
+    log.info(f"SSH client: {'available' if ssh_found else 'not found'}")
+
+    # Log token status (truncated for security)
+    token_preview = f"{TOKEN[:8]}...{TOKEN[-4:]}" if TOKEN else "none"
+    log.info(f"Auth token loaded (preview: {token_preview})")
+
+    log.info(f"xray binary: {'available' if os.path.exists(XRAY_BINARY) else 'not installed'}")
+    log.info(f"WebSocket terminal: ws://{HOST}:{PORT}/ws/terminal?token=<token>")
+
     web.run_app(app, host=HOST, port=PORT, access_log=None)

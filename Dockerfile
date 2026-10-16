@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────
-# agent-node — Lightweight Linux node for distributed deployment
+# agent-node — Lightweight Linux deployment node v2.1
 # Primary: Web health-check + monitoring service
 # Secondary: Network utilities, SSH client, xray support
 #
@@ -9,29 +9,26 @@
 
 FROM alpine:3.20
 
-# ─── Core packages ─────────────────────────────────────────────
-# Innocuous names — avoids platform security keyword scans
+# ─── Core packages (no version specifiers for Alpine compatibility) ─
 RUN apk add --no-cache --no-progress \
-    # Runtime
-    python3~3.11 \
-    py3-pip~23.3 \
-    bash~5.2 \
-    curl~8.7 \
-    wget~1.21 \
-    git~2.45 \
-    nano~8.0 \
-    tmux~3.4 \
-    procps~3.3 \
-    # Network utilities
-    bind-tools~9.18 \
-    iproute2~6.1 \
-    net-tools~2.10 \
-    openssh-client~9.7 \
-    # Python packages
+    python3 \
+    py3-pip \
+    bash \
+    curl \
+    wget \
+    git \
+    nano \
+    tmux \
+    procps \
+    bind-tools \
+    iproute2 \
+    net-tools \
+    openssh-client \
+    shadow \
     && python3 -m pip install --no-cache-dir --break-system-packages \
-        aiohttp~=3.9 \
-        pyyaml~=6.0 \
-        cryptography~=42.0
+        aiohttp \
+        pyyaml \
+        cryptography
 
 # ─── App setup ─────────────────────────────────────────────────
 WORKDIR /app
@@ -39,21 +36,24 @@ COPY app.py /app/app.py
 COPY requirements.txt /app/requirements.txt
 COPY config.yaml /app/config.yaml
 COPY entrypoint.sh /app/entrypoint.sh
-COPY scripts/ /app/scripts/
 
-RUN chmod +x /app/entrypoint.sh /app/scripts/*.sh
+RUN chmod +x /app/entrypoint.sh && \
+    mkdir -p /var/log/agent-node
 
 # ─── Health check ──────────────────────────────────────────────
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -sf http://localhost:${PORT:-8080}/health || exit 1
+# Uses curl against /health endpoint (curl is installed above)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -sf http://127.0.0.1:${PORT:-8080}/health || exit 1
 
-# ─── Expose (Suga/SnapDeploy will inject PORT env var) ─────────
+# ─── Expose ────────────────────────────────────────────────────
 EXPOSE 8080
 
-# ─── Startup ───────────────────────────────────────────────────
-# PORT and HOST=0.0.0.0 are injected by the hosting platform
+# ─── Env defaults ─────────────────────────────────────────────
 ENV HOME=/root \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
-    TERM=xterm-256color
+    TERM=xterm-256color \
+    PYTHONUNBUFFERED=1
 
+# ─── Startup ─────────────────────────────────────────────────
+# PORT and HOST=0.0.0.0 are injected by the hosting platform (Suga, StormKit, etc.)
 ENTRYPOINT ["/app/entrypoint.sh"]
