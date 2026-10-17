@@ -1,0 +1,12 @@
+{
+    "name": "agent-node",
+    "version": "2.1.0",
+    "description": "Lightweight Linux deployment node",
+    "scripts": {
+        "start": "python3 app.py",
+        "dev": "python3 app.py"
+    },
+    "engines": {
+        "node": ">=18"
+    }
+}
