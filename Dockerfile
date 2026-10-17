@@ -9,7 +9,9 @@
 
 FROM alpine:3.20
 
-# ─── Core packages (no version specifiers for Alpine compatibility) ─
+# ─── Core packages (Alpine 3.20 compatible — no version specifiers) ─
+# Package names verified for Alpine: openssh (not openssh-client), openssh must be installed
+# 'shadow' is NOT an Alpine package — skip it
 RUN apk add --no-cache --no-progress \
     python3 \
     py3-pip \
@@ -23,8 +25,8 @@ RUN apk add --no-cache --no-progress \
     bind-tools \
     iproute2 \
     net-tools \
-    openssh-client \
-    shadow \
+    openssh \
+    && echo "SSH client: $(which ssh || echo 'NOT FOUND')" \
     && python3 -m pip install --no-cache-dir --break-system-packages \
         aiohttp \
         pyyaml \

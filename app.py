@@ -377,10 +377,14 @@ if __name__ == "__main__":
     log.info(f"Starting agent-node on {HOST}:{PORT}")
     log.info(f"xray support: {'enabled' if XRAY_ENABLED else 'disabled'}")
 
-    # Check SSH in both possible locations
-    ssh_paths = ["/usr/bin/ssh", "/usr/bin/ssh", "/usr/local/bin/ssh"]
-    ssh_found = any(os.path.exists(p) for p in ssh_paths)
-    log.info(f"SSH client: {'available' if ssh_found else 'not found'}")
+    # Check SSH in all possible locations on Alpine
+    ssh_paths = ["/usr/bin/ssh", "/usr/bin/ssh", "/usr/local/bin/ssh", "/bin/ssh", "/usr/libexec/ssh"]
+    ssh_found = any(os.path.exists(p) for p in ssh_paths) if os.path.exists("/usr/bin/ssh") else False
+    # Also try 'which ssh'
+    if not ssh_found:
+        import shutil
+        ssh_found = shutil.which("ssh") is not None
+    log.info(f"SSH client: {'available — ' + str(shutil.which('ssh')) if ssh_found else 'not found'}")
 
     # Log token status (truncated for security)
     token_preview = f"{TOKEN[:8]}...{TOKEN[-4:]}" if TOKEN else "none"
