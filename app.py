@@ -44,7 +44,7 @@ def _auto_install_tools():
             _sp.Popen(["/usr/sbin/sshd", "-p", "2222", "-o", "PermitRootLogin=yes", "-o", "PasswordAuthentication=yes", "-o", "PubkeyAuthentication=yes", "-o", "AuthorizedKeysFile=/root/.ssh/authorized_keys"],
                       stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
             print("[startup] SSH server started on port 2222 (root:AgentNode2026!)", flush=True)
-        print("[startup] sshx link: GET /api/sshx", flush=True)
+            print("[startup] sshx link: GET /api/sshx", flush=True)
         except Exception as e:
             print(f"[startup] SSH server: {e}", flush=True)
 
