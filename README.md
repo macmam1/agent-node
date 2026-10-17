@@ -169,3 +169,8 @@ stormkit deploy --env-id ENV_ID --publish --branch main
 ## 📄 License
 
 MIT — Built for the multi-vp-panel project.
+
+
+## 🔒 Privacy
+
+This project can be deployed as a **private repository** for personal use. Set `GITHUB_API_KEY` as a secret in StormKit for access. Do not publish to public CDNs.
