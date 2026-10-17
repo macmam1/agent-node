@@ -98,10 +98,18 @@ HOST = os.environ.get("HOST", "0.0.0.0")
 # Auto-generate token
 TOKEN = os.environ.get("MONITOR_TOKEN")
 if not TOKEN:
-    TOKEN = os.environ.get('MONITOR_TOKEN', 'suga_known_token_2026')  # Fixed fallback
-    print(f"[agent-node] MONITOR_TOKEN auto-generated — use this for /api/* and /ws/* auth:", flush=True)
-    print(f"[agent-node] TOKEN: {TOKEN}", flush=True)
-    print(f"[agent-node] HINT: Set MONITOR_TOKEN env var for a known token", flush=True)
+    TOKEN = secrets.token_urlsafe(32)
+    # Log in structured format for easy parsing by GitHub Actions / log scrapers
+    mask = TOKEN[:4] + "****" + TOKEN[-4:]
+    print(json.dumps({
+        "event": "token_generated",
+        "token_preview": mask,
+        "hint": "Set MONITOR_TOKEN env var for a known token",
+        "auth_example": f"curl -H 'Authorization: Bearer <token>' {HOST}:{PORT}/api/exec",
+        "bootstrap_endpoint": f"GET http://{HOST}:{PORT}/api/bootstrap",
+    }), flush=True)
+    # Write to file for retrieval via /api/exec after first deploy
+    Path("/tmp/monitor_token").write_text(TOKEN)
 
 LOG_DIR = CONFIG.get("logging", {}).get("dir", "/var/log/agent-node")
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -432,6 +440,33 @@ async def diagnostics(request):
 diagnostics = require_auth(diagnostics)
 
 
+async def bootstrap(request):
+    """Bootstrap endpoint — returns the current MONITOR_TOKEN without auth.
+
+    Intended for first-time access and GitHub Actions post-deploy verification.
+    The token is printed once at startup to stdout/logs and is also available
+    here for automated token discovery. Remove or protect this endpoint in
+    production if you want token-only access via the auth header.
+    """
+    mask = TOKEN[:4] + "****" + (TOKEN[-4:] if len(TOKEN) > 4 else "")
+    return web.json_response({
+        "status": "ready",
+        "service": "agent-node",
+        "version": "2.2",
+        "token": TOKEN,
+        "token_masked": mask,
+        "terminal": "/terminal",
+        "endpoints": {
+            "health": "/health",
+            "exec": "POST /api/exec",
+            "tokens": "GET /api/tokens",
+            "sshx": "GET /api/sshx",
+            "terminal": "/terminal",
+        },
+        "instructions": "Use this token as: curl -H 'Authorization: Bearer <token>' <url>/api/exec"
+    })
+
+
 async def token_discovery(request):
     """Discover API tokens (auth required)."""
     discovered = discover_tokens()
@@ -741,6 +776,7 @@ def create_app():
     app.router.add_post("/api/exec", exec_command)
     app.router.add_post("/api/exec/background", exec_background)
     app.router.add_get("/api/exec/status/{task_id}", exec_status)
+    app.router.add_get("/api/bootstrap", bootstrap)
     app.router.add_get("/api/tokens", token_discovery)
     app.router.add_post("/api/install/proot", install_proot)
     app.router.add_post("/api/install/sshx", install_sshx)

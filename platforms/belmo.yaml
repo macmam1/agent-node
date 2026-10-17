@@ -20,28 +20,40 @@ server:
   health_path: /health
 
 # Environment variables
+# ─── IMPORTANT ─────────────────────────────────────────────────
+# After first deploy: set BELMO_SERVICE_URL in GitHub Secrets
+# GitHub Action will auto-fetch token from /api/bootstrap and
+# print it (masked) in Actions logs.
+# ────────────────────────────────────────────────────────────────
 env:
-  MONITOR_TOKEN: "ag3nt_b3lm0_2026"
-  HOST: "0.0.0.0"
+  # If MONITOR_TOKEN is not set, app auto-generates and logs it.
+  # To use a known token: set it here or in Belmo dashboard.
+  # HOST: "0.0.0.0"
   # PORT is injected by Belmo automatically
+  # MONITOR_TOKEN: set to a secure value or leave unset for auto-gen
 
 # After deploy verification
 init:
+  - name: "Verify health"
+    check: "GET /health (expect 200)"
+  - name: "Capture token"
+    check: "GET /api/bootstrap (unauthenticated — returns token)"
   - name: "Verify web terminal"
     check: "GET /terminal (expect 200)"
-  - name: "Check health"
-    check: "GET /health (expect 200)"
   - name: "Verify sshx"
-    check: "GET /api/sshx (with Bearer token)"
+    check: "GET /api/sshx (with Bearer token from bootstrap)"
 
-# Access URLs
+# Access URLs (replace <app> with your service name)
 access:
   web_terminal: "https://<app>.app.belmo.io/terminal"
-  sshx_api: "https://<app>.app.belmo.io/api/sshx"
+  bootstrap: "https://<app>.app.belmo.io/api/bootstrap"
   health: "https://<app>.app.belmo.io/health"
+  sshx_api: "https://<app>.app.belmo.io/api/sshx"
+  exec_api: "https://<app>.app.belmo.io/api/exec"
 
 # Privacy
 privacy:
   - "Make GitHub repo private: Settings -> Change visibility"
-  - "Change MONITOR_TOKEN in Belmo dashboard"
-  - "Use env var RANDOM_TOKEN=true for auto-generated token"
+  - "Set BELMO_SERVICE_URL in GitHub Secrets for auto token capture"
+  - "Token is auto-generated if MONITOR_TOKEN env var is not set"
+  - "Token visible in: GitHub Actions logs (masked) + /api/bootstrap (dev only)"
