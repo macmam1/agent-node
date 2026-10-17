@@ -238,3 +238,43 @@ Belmo.io offers a free tier that never sleeps -- perfect for agent-node.
 - sshx starts automatically (check /api/sshx after 30s)
 - Port 2222 (SSH) is internal only -- use web terminal or sshx
 - Free tier: 0.5 vCPU / 512MB RAM, 1 service, no custom domain
+
+
+---
+
+## 🔐 Token Auto-Generation (GitHub Actions)
+
+When you deploy without setting `MONITOR_TOKEN`, the agent-node **auto-generates** a secure token.
+
+### How it works:
+1. **GitHub Actions** runs on every push to `main`
+2. Generates a cryptographically secure token (openssl)
+3. Stores it as GitHub Secret `MONITOR_TOKEN` (encrypted)
+4. Token is available as env var on the platform
+
+### Check your token after deploy:
+```bash
+# Option 1: From platform logs (stdout)
+# Look for: {"event": "token_generated", "token_preview": "xxxx...xxxx"}
+
+# Option 2: From container filesystem (via exec)
+curl -H "Authorization: Bearer <first-deploy-token>" \
+  https://<your-app>.app.belmo.io/api/exec
+# Then: cat /tmp/monitor_token
+
+# Option 3: Set your own token (recommended)
+# In platform dashboard: MONITOR_TOKEN=your-secure-token-here
+```
+
+### GitHub Secrets needed:
+| Secret | Description |
+|--------|-------------|
+| `MONITOR_TOKEN` | Auto-generated secure token (set by workflow) |
+| `STORMKIT_API_KEY` | For Suga/StormKit deploy (if needed) |
+| `BELMO_API_KEY` | For Belmo deploy (if using API) |
+
+### Privacy:
+- Token is stored as GitHub Secret (encrypted at rest)
+- Never committed to code
+- Auto-rotated on every deploy (if workflow_dispatch)
+- Can be changed in platform dashboard anytime
