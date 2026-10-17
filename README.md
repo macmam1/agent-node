@@ -203,3 +203,38 @@ Bearer suga_known_token_2026
 1. ریپو را **private** کنید: GitHub → Settings → Change visibility → Make private
 2. توکن را عوض کنید: env var `MONITOR_TOKEN` را در Suga تنظیم کنید
 3. برای دسترسی بیرونی به SSH: از Cloudflare Tunnel یا پورت فورواردینگ استفاده کنید
+
+
+---
+
+## Deploy to Belmo.io (Free, Never Sleeps)
+
+Belmo.io offers a free tier that never sleeps -- perfect for agent-node.
+
+### Quick Deploy
+1. Sign up: https://dashboard.belmo.io/signup
+2. Install GitHub App on `macmam1/agent-node`
+3. New Service -> API -> Select repo `main`
+4. Set `MONITOR_TOKEN` to a secure value
+5. Override start command to `python3 app.py`
+6. Click Deploy (2-4 minutes)
+7. Access at `https://agent-node.app.belmo.io/terminal`
+
+### Environment Variables
+| Variable | Description |
+|----------|-------------|
+| `MONITOR_TOKEN` | Auth for /api/* and /ws/* endpoints |
+| `HOST` | `0.0.0.0` (accept all connections) |
+| `PORT` | Injected by Belmo automatically |
+
+### After Deploy
+- Web Terminal: `https://agent-node.app.belmo.io/terminal`
+- sshx link: `GET /api/sshx` (with Bearer token)
+- SSH: `ssh root@host -p 2222` (from within network)
+- API: `POST /api/exec` with `Authorization: Bearer <token>`
+
+### Notes
+- Startup hook auto-installs: ssh, curl, wget, xray, cloudflared
+- sshx starts automatically (check /api/sshx after 30s)
+- Port 2222 (SSH) is internal only -- use web terminal or sshx
+- Free tier: 0.5 vCPU / 512MB RAM, 1 service, no custom domain
