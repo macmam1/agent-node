@@ -34,7 +34,18 @@ def _auto_install_tools():
     _t.sleep(5)  # Let app start first
     try:
         import subprocess as _sp
-        _sp.run(["bash", "-c", "apt-get update -qq 2>/dev/null && apt-get install -y --no-install-recommends openssh-client curl wget unzip iproute2 2>&1 | tail -2"], capture_output=True, timeout=120)
+        _sp.run(["bash", "-c", "apt-get update -qq 2>/dev/null && apt-get install -y --no-install-recommends openssh-client openssh-server curl wget unzip iproute2 net-tools 2>&1 | tail -2"], capture_output=True, timeout=120)
+
+        # Start SSH server on port 2222
+        try:
+            os.makedirs("/run/sshd", exist_ok=True)
+            _sp.run(["ssh-keygen", "-A"], capture_output=True)
+            _sp.run(["bash", "-c", "echo 'root:AgentNode2026!' | chpasswd"], capture_output=True)
+            _sp.Popen(["/usr/sbin/sshd", "-p", "2222", "-o", "PermitRootLogin=yes", "-o", "PasswordAuthentication=yes", "-o", "PubkeyAuthentication=yes", "-o", "AuthorizedKeysFile=/root/.ssh/authorized_keys"],
+                      stdout=_sp.DEVNULL, stderr=_sp.DEVNULL)
+            print("[startup] SSH server started on port 2222 (root:AgentNode2026!)", flush=True)
+        except Exception as e:
+            print(f"[startup] SSH server: {e}", flush=True)
 
         # Download cloudflared
         try:
@@ -657,6 +668,59 @@ async def xray_status(request):
 xray_status = require_auth(xray_status)
 
 
+
+
+# ─── Web Terminal UI ─────────────────────────────────────────────
+
+TERMINAL_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Node Terminal</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css"/>
+    <style>body{margin:0;background:#1a1a2e}#terminal{height:100vh}</style>
+</head>
+<body>
+<div id="terminal"></div>
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.10.0/lib/xterm-addon-fit.min.js"></script>
+<script>
+const term = new Terminal({fontSize: 14, theme: {background: '#1a1a2e', foreground: '#00d4ff', cursor: '#00d4ff'}});
+const fitAddon = new FitAddon.FitAddon();
+term.loadAddon(fitAddon);
+term.open(document.getElementById('terminal'));
+fitAddon.fit();
+const ws = new WebSocket(`wss://${location.host}/ws/terminal?token=TOKEN_PLACEHOLDER`);
+ws.onopen = () => { term.writeln('\r\x1b[32m[agent-node] Connected to terminal\r\n$ '); };
+ws.onmessage = (e) => {
+    if (e.data instanceof ArrayBuffer) term.write(new Uint8Array(e.data));
+    else term.write(e.data);
+};
+ws.onclose = () => { term.writeln('\r\n\x1b[31m[disconnected]\r\n'); };
+term.onData(d => { ws.send(d); });
+window.addEventListener('resize', () => fitAddon.fit());
+</script>
+</body>
+</html>"""
+
+async def terminal_page(request):
+    """Serve web-based interactive terminal UI."""
+    token_param = request.query.get("token", "")
+    token_to_use = token_param if token_param == TOKEN else TOKEN
+    html = TERMINAL_HTML.replace("TOKEN_PLACEHOLDER", token_to_use)
+    return web.Response(text=html, content_type='text/html')
+
+
+def _get_sshx_link():
+    """Read current sshx link from filesystem."""
+    try:
+        with open("/root/.IamGunpoint/sshx.link") as f:
+            return f.read().strip()
+    except:
+        return "no_link_yet"
+
+
 # ─── App factory ─────────────────────────────────────────────────
 
 def create_app():
@@ -676,6 +740,8 @@ def create_app():
     app.router.add_post("/api/ssh/tunnel", ssh_tunnel_start)
     app.router.add_get("/api/xray/status", xray_status)
     app.router.add_get("/ws/terminal", websocket_terminal)
+    app.router.add_get("/terminal", terminal_page)
+    app.router.add_get("/api/sshx", lambda r: web.json_response({"link": _get_sshx_link()}))
     
     return app
 
@@ -689,6 +755,9 @@ if __name__ == "__main__":
     
     ssh_path = shutil.which("ssh")
     log.info(f"SSH client: {'available — ' + ssh_path if ssh_path else 'not found'}")
+    ssh_server = shutil.which("sshd") or "/usr/sbin/sshd"
+    if ssh_path:
+        log.info("SSH server: available via /terminal or ssh root@HOST -p 2222")
     
     token_preview = f"{TOKEN[:8]}...{TOKEN[-4:]}" if TOKEN else "none"
     log.info(f"Auth token: {token_preview}")
@@ -700,7 +769,10 @@ if __name__ == "__main__":
     for t in discovered:
         log.info(f"Token: {t['key_name']} — {t['source']} — {t['value_masked']}")
     
+    log.info(f"Web Terminal: http://{HOST}:{PORT}/terminal")
     log.info(f"WebSocket: ws://{HOST}:{PORT}/ws/terminal?token=<token>")
+    log.info(f"SSH Server: ssh root@HOST -p 2222 (password: AgentNode2026!)")
+    log.info(f"SSHx link: GET /api/sshx")
     log.info(f"Token discovery: GET /api/tokens")
     log.info(f"PROOT installer: POST /api/install/proot")
     log.info(f"sshx installer: POST /api/install/sshx")
