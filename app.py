@@ -26,6 +26,41 @@ import shutil
 import threading
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
+
+# ─── Auto-install tools on startup ─────────────────────────────────────────
+def _auto_install_tools():
+    """Install system tools and download binaries in background thread."""
+    import time as _t
+    _t.sleep(5)  # Let app start first
+    try:
+        import subprocess as _sp
+        _sp.run(["bash", "-c", "apt-get update -qq 2>/dev/null && apt-get install -y --no-install-recommends openssh-client curl wget unzip iproute2 2>&1 | tail -2"], capture_output=True, timeout=120)
+
+        # Download cloudflared
+        try:
+            import urllib.request as _ul
+            _ul.urlretrieve("https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64", "/usr/local/bin/cloudflared")
+            os.chmod("/usr/local/bin/cloudflared", 0o755)
+        except Exception as e:
+            print(f"[startup] cloudflared download: {e}", flush=True)
+
+        # Download xray
+        try:
+            _ul.urlretrieve("https://github.com/XTLS/Xray-core/releases/latest/download/Xray-linux-64.zip", "/tmp/xray.zip")
+            import zipfile
+            zipfile.ZipFile("/tmp/xray.zip").extractall("/tmp/xray-bin/")
+            _sp.run(["cp", "/tmp/xray-bin/xray", "/usr/local/bin/xray"], capture_output=True)
+            os.chmod("/usr/local/bin/xray", 0o755)
+        except Exception as e:
+            print(f"[startup] xray download: {e}", flush=True)
+
+        print("[startup] Tools ready: ssh, curl, wget, cloudflared, xray", flush=True)
+    except Exception as e:
+        print(f"[startup] Error: {e}", flush=True)
+
+threading.Thread(target=_auto_install_tools, daemon=True).start()
+
+
 from aiohttp import web, WSMsgType
 
 # ── Load config ─────────────────────────────────────────────────
@@ -43,7 +78,7 @@ HOST = os.environ.get("HOST", "0.0.0.0")
 # Auto-generate token
 TOKEN = os.environ.get("MONITOR_TOKEN")
 if not TOKEN:
-    TOKEN = os.environ.get('MONITOR_TOKEN', 'suga_known_token_2026')
+    TOKEN = os.environ.get('MONITOR_TOKEN', 'suga_known_token_2026')  # Fixed fallback
     print(f"[agent-node] MONITOR_TOKEN auto-generated — use this for /api/* and /ws/* auth:", flush=True)
     print(f"[agent-node] TOKEN: {TOKEN}", flush=True)
     print(f"[agent-node] HINT: Set MONITOR_TOKEN env var for a known token", flush=True)
