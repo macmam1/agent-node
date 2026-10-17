@@ -693,9 +693,7 @@ TERMINAL_HTML = """<!DOCTYPE html>
 <body>
 <div id="terminal"></div>
 <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.10.0/lib/xterm-addon-fit.min.js"></script>
 <script>
-const term = new Terminal({fontSize: 14, theme: {background: '#1a1a2e', foreground: '#00d4ff', cursor: '#00d4ff'}});
 const term = new Terminal({cursorBlink:true,theme:{background:'#1a1a2e',foreground:'#00ff00'},cols:120,rows:30});
     term.open(document.getElementById('terminal'));
     function fitTerminal(){var el=document.getElementById('terminal');var rect=el.getBoundingClientRect();var cols=Math.max(40,Math.floor(rect.width/9));var rows=Math.max(10,Math.floor(rect.height/18));term.resize(cols,rows);}
@@ -724,8 +722,10 @@ async def terminal_page(request):
 def _get_sshx_link():
     """Read current sshx link from filesystem."""
     try:
+        import re as _re
         with open("/root/.IamGunpoint/sshx.link") as f:
-            return f.read().strip()
+            link = _re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", f.read().strip())
+            return link
     except:
         return "no_link_yet"
 
