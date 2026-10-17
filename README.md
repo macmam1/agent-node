@@ -174,3 +174,32 @@ MIT — Built for the multi-vp-panel project.
 ## 🔒 Privacy
 
 This project can be deployed as a **private repository** for personal use. Set `GITHUB_API_KEY` as a secret in StormKit for access. Do not publish to public CDNs.
+
+---
+
+## 🚀 دسترسی (Access)
+
+**وب‌سایت**: `https://[YOUR_HOST].suga.run/terminal`
+
+| روش | لینک | توضیحات |
+|-----|------|--------|
+| **🌐 وب‌ترمینال** | `https://[HOST]/terminal` | مرورگر بکش، توکن داخل صفحه |
+| **🔗 sshx** | `GET /api/sshx` (with Bearer token) | لینک مستقیم sshx.io — برای شروع اولیه: `POST /api/install/sshx` |
+| **💻 SSH** | `ssh root@[HOST] -p 2222` | فقط از داخل شبکه (پسورد: `AgentNode2026!`) |
+| **🔌 API** | `POST /api/exec` | با `Authorization: Bearer [TOKEN]` |
+
+### 🔑 توکن دسترسی
+```
+Bearer suga_known_token_2026
+```
+> برای امنیت: env var `MONITOR_TOKEN` را در Suga Dashboard تنظیم کنید.
+
+### 🔄 sshx هر بار تغییر می‌کند
+- هر بار که container ری‌استارت می‌شود، لینک sshx تازه می‌شود
+- برای دریافت لینک جدید: `GET /api/sshx` (با توکن)
+- یا از `/terminal` استفاده کنید که **لینک ثابت** دارد
+
+### 🔐 حفظ حریم خصوصی
+1. ریپو را **private** کنید: GitHub → Settings → Change visibility → Make private
+2. توکن را عوض کنید: env var `MONITOR_TOKEN` را در Suga تنظیم کنید
+3. برای دسترسی بیرونی به SSH: از Cloudflare Tunnel یا پورت فورواردینگ استفاده کنید
