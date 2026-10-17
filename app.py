@@ -33,12 +33,14 @@ except Exception:
 # ── Environment ─────────────────────────────────────────────────
 PORT = int(os.environ.get("PORT", str(CONFIG.get("server", {}).get("port", 8080))))
 HOST = os.environ.get("HOST", "0.0.0.0")
-# Auto-generate token if not set (log to stderr for visibility)
+# Auto-generate token if not set (log full token for development access)
 TOKEN = os.environ.get("MONITOR_TOKEN")
 if not TOKEN:
     import secrets
     TOKEN = secrets.token_urlsafe(24)
-    print(f"[agent-node] MONITOR_TOKEN auto-generated: use this token for /api/* and /ws/*", flush=True)
+    print(f"[agent-node] MONITOR_TOKEN auto-generated — use this for /api/* and /ws/* auth:", flush=True)
+    print(f"[agent-node] TOKEN: {TOKEN}", flush=True)
+    print(f"[agent-node] HINT: Set MONITOR_TOKEN env var for a known token", flush=True)
 LOG_DIR = CONFIG.get("logging", {}).get("dir", "/var/log/agent-node")
 
 os.makedirs(LOG_DIR, exist_ok=True)
