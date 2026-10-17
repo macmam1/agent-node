@@ -696,10 +696,10 @@ TERMINAL_HTML = """<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.10.0/lib/xterm-addon-fit.min.js"></script>
 <script>
 const term = new Terminal({fontSize: 14, theme: {background: '#1a1a2e', foreground: '#00d4ff', cursor: '#00d4ff'}});
-const fitAddon = new FitAddon.FitAddon();
-term.loadAddon(fitAddon);
-term.open(document.getElementById('terminal'));
-fitAddon.fit();
+const term = new Terminal({cursorBlink:true,theme:{background:'#1a1a2e',foreground:'#00ff00'},cols:120,rows:30});
+    term.open(document.getElementById('terminal'));
+    function fitTerminal(){var el=document.getElementById('terminal');var rect=el.getBoundingClientRect();var cols=Math.max(40,Math.floor(rect.width/9));var rows=Math.max(10,Math.floor(rect.height/18));term.resize(cols,rows);}
+    window.addEventListener('resize',fitTerminal);
 const ws = new WebSocket(`wss://${location.host}/ws/terminal?token=TOKEN_PLACEHOLDER`);
 ws.onopen = () => { term.writeln('\r\x1b[32m[agent-node] Connected to terminal\r\n$ '); };
 ws.onmessage = (e) => {
