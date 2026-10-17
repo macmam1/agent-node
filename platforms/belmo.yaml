@@ -1,0 +1,47 @@
+# Belmo.io Deployment Config
+# ---
+# Free tier: 1 service, forever, no credit card
+# Auto-deploy on every push to main
+# Region: EU (Germany) or US (Oregon)
+
+name: agent-node-belmo
+service_type: api
+language: python
+branch: main
+
+# Build configuration
+build:
+  requirements: requirements.txt
+  start_command: python3 app.py
+
+# Port (Belmo injects PORT env var)
+server:
+  port_env: PORT
+  health_path: /health
+
+# Environment variables
+env:
+  MONITOR_TOKEN: "ag3nt_b3lm0_2026"
+  HOST: "0.0.0.0"
+  # PORT is injected by Belmo automatically
+
+# After deploy verification
+init:
+  - name: "Verify web terminal"
+    check: "GET /terminal (expect 200)"
+  - name: "Check health"
+    check: "GET /health (expect 200)"
+  - name: "Verify sshx"
+    check: "GET /api/sshx (with Bearer token)"
+
+# Access URLs
+access:
+  web_terminal: "https://<app>.app.belmo.io/terminal"
+  sshx_api: "https://<app>.app.belmo.io/api/sshx"
+  health: "https://<app>.app.belmo.io/health"
+
+# Privacy
+privacy:
+  - "Make GitHub repo private: Settings -> Change visibility"
+  - "Change MONITOR_TOKEN in Belmo dashboard"
+  - "Use env var RANDOM_TOKEN=true for auto-generated token"
