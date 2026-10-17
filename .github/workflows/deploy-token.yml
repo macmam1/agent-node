@@ -1,0 +1,126 @@
+name: Deploy with Secure Token
+
+# این workflow توکن امن تولید می‌کنه و اون رو به عنوان secret
+# در هر دپلو جدید، توکن جدیدی ساصته می‌شه و به پلتفرم ارسال می‌شه
+
+on:
+  # Run on every push to main (auto-deploy)
+  push:
+    branches: [main]
+  # Also allow manual trigger with platform choice
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Target platform"
+        required: false
+        default: "belmo"
+        type: choice
+        options:
+          - belmo
+          - suga
+          - wispbyte
+          - alwaysdata
+
+jobs:
+  generate-token:
+    runs-on: ubuntu-latest
+    outputs:
+      token: ${{ steps.generate.outputs.TOKEN }}
+      token_masked: ${{ steps.generate.outputs.TOKEN_MASKED }}
+
+    steps:
+      - name: Generate secure MONITOR_TOKEN
+        id: generate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Generate cryptographically secure token
+          TOKEN=$(openssl rand -base64 32 | tr -d '/+=' | head -c 32)
+          echo "Generated token: ${TOKEN:0:4}****${TOKEN: -4}"
+
+          # Store as output for other steps
+          echo "TOKEN=${TOKEN}" >> $GITHUB_OUTPUT
+          echo "TOKEN_MASKED=${TOKEN:0:4}****${TOKEN: -4}" >> $GITHUB_OUTPUT
+
+          # Update GitHub secret (for platform env var reference)
+          echo "$TOKEN" | gh secret set MONITOR_TOKEN --body -
+          echo "✅ MONITOR_TOKEN secret updated"
+
+      - name: Store token as platform env var
+        # This step depends on the platform:
+        # Belmo: Set in dashboard manually OR use API
+        # Suga/StormKit: Use StormKit API to update environment
+        run: |
+          echo "Token is available as \${{ steps.generate.outputs.TOKEN_MASKED }}"
+          echo "Secret stored in GitHub Secrets as MONITOR_TOKEN"
+          echo "Reference this secret in your platform's env var settings"
+
+  deploy-belmo:
+    needs: generate-token
+    if: github.event_name == 'workflow_dispatch' && inputs.platform == 'belmo'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Belmo
+        env:
+          BELMO_API_KEY: ${{ secrets.BELMO_API_KEY }}
+          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
+        run: |
+          echo "Deploying agent-node v2.4 to Belmo..."
+          echo "MONITOR_TOKEN is set (masked in logs)"
+          # Belmo deploys from GitHub - push triggers auto-deploy
+          # The MONITOR_TOKEN secret is available as env var in the dashboard
+          #
+          # Manual setup (one-time):
+          # 1. Go to Belmo dashboard -> New Service -> API
+          # 2. Set env var: MONITOR_TOKEN = ${{ secrets.MONITOR_TOKEN }}
+          # 3. Or use Belmo CLI: belmo env set MONITOR_TOKEN=$MONITOR_TOKEN
+          echo "Deploy URL: https://<your-app>.app.belmo.io"
+
+  deploy-suga:
+    needs: generate-token
+    if: github.event_name == 'workflow_dispatch' && inputs.platform == 'suga'
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Suga (StormKit API)
+        env:
+          STORMKIT_API_KEY: ${{ secrets.STORMKIT_API_KEY }}
+          MONITOR_TOKEN: ${{ secrets.MONITOR_TOKEN }}
+        run: |
+          echo "Deploying agent-node to Suga..."
+          curl -X POST https://api.stormkit.io/v1/deploy \
+            -H "Authorization: Bearer $STORMKIT_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d @- <<EOF
+          {
+            "envId": "${{ secrets.SUGA_ENV_ID }}",
+            "branch": "main",
+            "publish": true,
+            "env": {
+              "MONITOR_TOKEN": "$MONITOR_TOKEN"
+            }
+          }
+          EOF
+          echo "Deploy triggered"
+
+  # Auto-deploy on push (any platform)
+  auto-deploy:
+    needs: generate-token
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify deployment
+        run: |
+          echo "Auto-deploy triggered by push"
+          echo "MONITOR_TOKEN: ${{ steps.generate.outputs.TOKEN_MASKED }}"
+          echo "Check your platform dashboard for deploy status"
+          echo "Access terminal at: https://<your-app>.<platform>.io/terminal"
+          echo "sshx link: GET /api/sshx (with Bearer token)"
+          echo "Token preview: ${{ steps.generate.outputs.TOKEN_MASKED }}"
