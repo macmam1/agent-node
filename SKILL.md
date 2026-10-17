@@ -24,3 +24,13 @@ Generalized platform deployment and node management skill.
 - Runs in background thread at app startup
 - Reinstalls tools on every container restart
 - Survives platform-initiated restarts
+
+
+### Belmo.io
+- Free tier: 1 service, forever, no credit card
+- Deploy: GitHub App -> New Service -> API -> Select macmam1/agent-node
+- Port: PORT env var (injected by platform)
+- Start command: python3 app.py
+- Auto-deploy: every push to main
+- Health check: GET /health
+- Notes: Always-on, EU/US regions, AI monitoring, never sleeps
