@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-agent-node v2.2 — Lightweight Linux deployment node.
+agent-node v2.3.1 — Lightweight Linux deployment node.
 
 Features:
   - Health check + monitoring service (primary)
@@ -77,7 +77,8 @@ def _auto_install_tools():
     except Exception as e:
         print(f"[startup] Error: {e}", flush=True)
 
-threading.Thread(target=_auto_install_tools, daemon=True).start()
+
+# deploy-trigger: 1792216640threading.Thread(target=_auto_install_tools, daemon=True).start()
 
 
 from aiohttp import web, WSMsgType
@@ -895,7 +896,7 @@ if __name__ == "__main__":
     import shutil
     app = create_app()
     
-    log.info(f"Starting agent-node v2.2 on {HOST}:{PORT}")
+    log.info(f"Starting agent-node v2.3.1 on {HOST}:{PORT}")
     log.info(f"xray support: {'enabled' if XRAY_ENABLED else 'disabled'}")
     
     ssh_path = shutil.which("ssh")
